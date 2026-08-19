@@ -1,0 +1,32 @@
+[project]
+name = "call-me-maybe"
+version = "0.1.0"
+description = "Constrained decoding for LLM function calling"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "flake8>=7.3.0",
+    "llm-sdk",
+    "mypy>=2.3.0",
+    "numpy>=2.5.1",
+    "pydantic>=2.13.4",
+]
+
+[tool.uv.workspace]
+members = [
+    "llm_sdk",
+]
+
+[tool.uv.sources]
+llm-sdk = { workspace = true, editable = true }
+
+[tool.mypy]
+exclude = "^(\\.venv/|llm_sdk/)"
+namespace_packages = false
+
+# The llm_sdk package is provided with the subject and is not ours to
+# fix, so its own type errors are not reported.
+[[tool.mypy.overrides]]
+module = ["llm_sdk", "llm_sdk.*"]
+ignore_missing_imports = true
+ignore_errors = true
