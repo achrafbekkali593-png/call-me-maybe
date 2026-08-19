@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by mlahssin.*
+*This project has been created as part of the 42 curriculum by ac*
 
 # call me maybe
 
