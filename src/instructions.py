@@ -13,7 +13,8 @@ HEADER = (
     "You are a function-calling assistant. Given the user "
     "request and the list of "
     "available functions below, choose exactly one function "
-    "and its arguments. "
+    "and its arguments. If the request does not clearly match any "
+    "of the other functions, choose fn_unknown. "
     "Respond with a single JSON object of the form:\n"
 )
 

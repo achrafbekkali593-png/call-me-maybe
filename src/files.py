@@ -25,15 +25,15 @@ def read_array(path: str) -> list[Any]:
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
     except FileNotFoundError:
-        raise InputError(f"file not found: {path}") from None
+        raise InputError(f"file not found: {path}")
     except PermissionError:
-        raise InputError(f"not allowed to read {path}") from None
+        raise InputError(f"not allowed to read {path}")
     except UnicodeDecodeError:
-        raise InputError(f"{path} is not valid UTF-8 text") from None
+        raise InputError(f"{path} is not valid UTF-8 text") 
     except json.JSONDecodeError as error:
-        raise InputError(f"invalid JSON in {path}: {error}") from None
+        raise InputError(f"invalid JSON in {path}: {error}")
     except OSError as error:
-        raise InputError(f"could not read {path}: {error}") from None
+        raise InputError(f"could not read {path}: {error}")
     if not isinstance(data, list):
         raise InputError(
             f"expected a JSON array in {path}, got {type(data).__name__}"

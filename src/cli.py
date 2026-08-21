@@ -9,10 +9,24 @@ from llm_sdk import Small_LLM_Model
 
 from .decoder import ConstrainedDecoder
 from .files import check_call, load_functions, load_prompts, write_results
+from .schema import FunctionSpec, ValueSpec, ValueType
 
 DEFAULT_FUNCTIONS = "data/input/functions_definition.json"
 DEFAULT_INPUT = "data/input/function_calling_tests.json"
 DEFAULT_OUTPUT = "data/output/function_calling_results.json"
+
+# Not part of functions_definition.json: the subject fixes that file, so
+# the fallback the model can reach for when nothing else fits is added
+# here instead, after the file is loaded.
+UNKNOWN_FUNCTION = FunctionSpec(
+    name="fn_unknown",
+    description=(
+        "Fallback used when the user request does not clearly match "
+        "any of the other declared functions."
+    ),
+    parameters={},
+    returns=ValueSpec(type=ValueType.STRING),
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +65,7 @@ def run(args: argparse.Namespace) -> int:
             f"{args.functions_definition}"
         )
         return 1
+    functions = functions + [UNKNOWN_FUNCTION]
     prompts = load_prompts(args.input)
 
     print("Loading the model...")

@@ -10,6 +10,7 @@ model scores highest.
 """
 
 import json
+import re
 from collections.abc import Iterable
 
 from llm_sdk import Small_LLM_Model
@@ -133,31 +134,63 @@ class ConstrainedDecoder(BaseModel):
             position += 1
         return chosen
 
-    def emit_number(self, allow_decimal: bool) -> None:
-        """Emit digits, plus a single decimal point when allowed.
+    def emit_number(self, allow_decimal: bool, prompt: str) -> None:
+        """Emit an optional sign, digits, and a single decimal point.
 
         Generation stops as soon as the model prefers a comma or a
         closing brace, which are the two tokens that end a JSON value.
         A number that never got a decimal point is finished with ".0" so
-        that it is written as a float.
+        that it is written as a float. The minus sign, when present,
+        can only be the very first token: once a digit or the sign
+        itself has been written, it is no longer offered. The
+        tokenizer has two ways to spell a minus sign -- a bare "-" and
+        a "-" fused with the space that precedes it -- and both are
+        offered, matched by their stripped text.
+
+        On the model backing this project, offering the sign is not
+        enough: it is a base-completion pass over the digits of the
+        prompt, and it very reliably ranks the bare digit above the
+        signed one even when the sign is right there in the request.
+        So the digits actually chosen are also checked, after the
+        fact, against the prompt itself: if the prompt spells this
+        same number with a leading "-", the sign is inserted whether
+        or not the model ever offered to write it.
         """
         digits_or_end = set(self.ids(DIGITS_OR_END))
         dot = self.ids(".")[0]
+        minus_tokens = set(self.ids("-")) | set(self.ids(" -"))
         seen_dot = False
+        seen_digit = False
+        seen_minus = False
+        number_starts_at = len(self.tokens)
+        whole_part = ""
 
         for _ in range(MAX_NUMBER_TOKENS):
             allowed = set(digits_or_end)
             if allow_decimal and not seen_dot:
                 allowed.add(dot)
+            if not seen_digit and not seen_minus:
+                allowed |= minus_tokens
             token = self.best_token(allowed)
             piece = self.text_of([token])
             if piece.isdigit():
                 self.tokens.append(token)
+                seen_digit = True
+                if not seen_dot:
+                    whole_part += piece
             elif piece == "." and allow_decimal and not seen_dot:
                 self.tokens.append(token)
                 seen_dot = True
+            elif piece.strip() == "-" and not seen_digit and not seen_minus:
+                self.tokens.append(token)
+                seen_minus = True
             else:
                 break
+
+        if not seen_minus and whole_part and re.search(
+            rf"-\s*{re.escape(whole_part)}(?!\d)", prompt
+        ):
+            self.tokens[number_starts_at:number_starts_at] = self.ids("-")
 
         if allow_decimal and not seen_dot:
             self.emit(".0")
@@ -189,16 +222,16 @@ class ConstrainedDecoder(BaseModel):
         """Emit either true or false, narrowing between the two."""
         self.pick_sequence([self.ids("true"), self.ids("false")])
 
-    def emit_value(self, value_type: ValueType) -> None:
+    def emit_value(self, value_type: ValueType, prompt: str) -> None:
         """Emit one argument value of the type the schema asks for."""
         if value_type is ValueType.STRING:
             self.emit_string()
         elif value_type is ValueType.BOOLEAN:
             self.emit_boolean()
         elif value_type is ValueType.INTEGER:
-            self.emit_number(allow_decimal=False)
+            self.emit_number(allow_decimal=False, prompt=prompt)
         else:
-            self.emit_number(allow_decimal=True)
+            self.emit_number(allow_decimal=True, prompt=prompt)
 
     # --- generating one complete call ---------------------------------
 
@@ -213,7 +246,7 @@ class ConstrainedDecoder(BaseModel):
         self.emit('"')
         return self.text_of(chosen)
 
-    def emit_parameters(self, name: str) -> None:
+    def emit_parameters(self, name: str, prompt: str) -> None:
         """Emit the parameters object declared for the chosen function."""
         self.emit(',\n"parameters" : {')
         function = self.find(name)
@@ -222,7 +255,7 @@ class ConstrainedDecoder(BaseModel):
             if index:
                 self.emit(", ")
             self.emit(f'"{key}": ')
-            self.emit_value(spec.type)
+            self.emit_value(spec.type, prompt)
         self.emit("}\n}")
 
     def generate(self, prompt: str) -> str:
@@ -235,6 +268,6 @@ class ConstrainedDecoder(BaseModel):
         self.emit(json.dumps(prompt))
         self.emit(",\n")
         self.emit('"name":"')
-        self.emit_parameters(self.choose_function())
+        self.emit_parameters(self.choose_function(), prompt)
 
         return self.text_of(self.tokens[answer_starts_at:])

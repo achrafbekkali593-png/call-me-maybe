@@ -8,7 +8,7 @@ instance) live in files.py, next to the code that reports them.
 
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ValueType(StrEnum):
@@ -38,6 +38,7 @@ class FunctionSpec(BaseModel):
 class PromptEntry(BaseModel):
     """One natural language request read from the input file."""
 
+    model_config = ConfigDict(extra="forbid")
     prompt: str
 
 
